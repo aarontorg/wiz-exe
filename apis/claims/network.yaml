@@ -1,0 +1,7 @@
+apiVersion: demo.wiz.io/v1alpha1
+kind: XNetwork
+metadata:
+  name: wiz-demo
+spec:
+  id: wiz-demo
+  #region: "us-west-2"

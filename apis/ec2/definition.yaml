@@ -1,0 +1,31 @@
+apiVersion: apiextensions.crossplane.io/v1
+kind: CompositeResourceDefinition
+metadata:
+  name: xec2s.demo.wiz.io
+spec:
+  group: demo.wiz.io
+  names:
+    kind: XEc2
+    plural: xec2s
+  versions:
+    - name: v1alpha1
+      served: true
+      referenceable: true
+      schema:
+        openAPIV3Schema:
+          type: object
+          properties:
+            spec:
+              type: object
+              properties:
+                id:
+                  type: string
+              required:
+                - id
+            status:
+              description: A status represents the observed state
+              properties:
+                privateIp:
+                  description: get the private ip
+                  type: string
+              type: object

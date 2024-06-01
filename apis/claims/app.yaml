@@ -1,0 +1,7 @@
+apiVersion: demo.wiz.io/v1alpha1
+kind: XApp
+metadata:
+  name: wiz-ec2
+spec:
+  id: wiz-demo
+  dbIp: 192.168.61.197
