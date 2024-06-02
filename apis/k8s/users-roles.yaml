@@ -1,81 +1,28 @@
-apiVersion: iam.aws.upbound.io/v1beta1
-kind: User
-metadata:
-  name: wiz-demo-buckets
-spec:
-  forProvider:
-    tags:
-      Name: wiz-demo-bucket
----
-apiVersion: iam.aws.upbound.io/v1beta1
-kind: Policy
-metadata:
-  name: wiz-demo-bucket-policy
-spec:
-  forProvider:
-    tags:
-      Name: wiz-demo-bucket-policy
-    policy: |
-      {
-          "Version": "2012-10-17",
-          "Statement": [
-              {
-                  "Effect": "Allow",
-                  "Action": [
-                      "s3:PutObject",
-                      "s3:PutObjectAcl"
-                  ],
-                  "Resource": [
-                      "arn:aws:s3:::wiz-demo-torg/*"
-                  ]
-              },
-              {
-                  "Effect": "Allow",
-                  "Action": [
-                      "s3:ListBucket"
-                  ],
-                  "Resource": [
-                      "arn:aws:s3:::wiz-demo-torg"
-                  ]
-              }
-          ]
-      }
----
-apiVersion: iam.aws.upbound.io/v1beta1
-kind: UserPolicyAttachment
-metadata:
-  name: wiz-demo-bucket-user-rpa
-spec:
-  forProvider:
-    policyArnRef:
-      name: wiz-demo-bucket-policy
-    userRef:
-      name: wiz-demo-buckets
----
+
 # EKS Admin role
-  apiVersion: iam.aws.upbound.io/v1beta1
-  kind: Role
-  metadata:
-    name: k8sadmin
-    labels:
-      role: k8sAdmin
-  spec:
-    forProvider:
-      assumeRolePolicy: |
-        {
-          "Version": "2012-10-17",
-          "Statement": [
-              {
-                  "Effect": "Allow",
-                  "Principal": {
-                      "AWS": "arn:aws:iam::058264154390:root"
-                  },
-                  "Action": [
-                      "sts:AssumeRole"
-                  ]
-              }
-          ]
-        }
+apiVersion: iam.aws.upbound.io/v1beta1
+kind: Role
+metadata:
+  name: k8sadmin
+  labels:
+    role: k8sAdmin
+spec:
+  forProvider:
+    assumeRolePolicy: |
+      {
+        "Version": "2012-10-17",
+        "Statement": [
+            {
+                "Effect": "Allow",
+                "Principal": {
+                    "AWS": "arn:aws:iam::058264154390:root"
+                },
+                "Action": [
+                    "sts:AssumeRole"
+                ]
+            }
+        ]
+      }
 ---
 apiVersion: iam.aws.upbound.io/v1beta1
 kind: User

@@ -1,0 +1,530 @@
+apiVersion: apiextensions.crossplane.io/v1
+kind: Composition
+metadata:
+  name: xec2s.demo.wiz.io
+spec:
+  writeConnectionSecretsToNamespace: crossplane-system
+  compositeTypeRef:
+    apiVersion: demo.wiz.io/v1alpha1
+    kind: XEc2
+  patchSets:
+    - name: network-id
+      patches:
+        - type: FromCompositeFieldPath
+          fromFieldPath: spec.id
+          toFieldPath: metadata.labels[networks.demo.wiz.io/network-id]
+  resources:
+    # Instance
+    - base:
+        apiVersion: ec2.aws.upbound.io/v1beta1
+        kind: Instance
+        spec:
+          forProvider:
+            ami: "ami-01cd4de4363ab6ee8"
+            instanceType: t2.micro
+            associatePublicIpAddress: true
+            region: us-west-2
+            subnetIdSelector:
+              matchLabels:
+                access: public
+            iamInstanceProfile: wiz-instance-profile
+            keyName: wiz-demo-ec2-keypair
+      name: wiz-ec2
+      patches:
+        - fromFieldPath: status.atProvider.privateIp
+          toFieldPath: status.privateIp
+          type: ToCompositeFieldPath
+        - type: PatchSet
+          patchSetName: network-id
+        - fromFieldPath: spec.id
+          toFieldPath: spec.forProvider.subnetIdSelector.matchLabels[networks.demo.wiz.io/network-id]
+        - fromFieldPath: spec.id
+          toFieldPath: spec.forProvider.vpcSecurityGroupIdRefs[0].name
+          transforms:
+            - string:
+                fmt: '%s-ec2-sg'
+              type: string
+        #- fromFieldPath: status.awsInfo.data.username
+        ##  toFieldPath: status.awsInfo.data.usernameDecode
+        #  transforms:
+        ##    - string:
+        #        type: Convert
+        #        convert: FromBase64
+        #      type: string
+        - type: CombineFromComposite
+          toFieldPath: spec.forProvider.userData
+          policy:
+            fromFieldPath: Required
+          combine:
+            variables:
+              - fromFieldPath: status.awsInfo.data.username
+              - fromFieldPath: status.awsInfo.data.password
+              - fromFieldPath: spec.id
+            strategy: string
+            string:
+              fmt: |
+                #!/bin/sh
+                sudo yum update
+                sudo yum install -y docker
+                sudo service docker start
+                sleep 5
+                sudo usermod -a -G docker ec2-user
+                sudo chkconfig docker on
+                sudo docker run --name mongodb -p 27017:27017 -d -e MONGO_INITDB_ROOT_USERNAME="mongoadmin" -e MONGO_INITDB_ROOT_PASSWORD="mongopasswd" mongodb/mongodb-community-server:latest
+                # Run the backup container
+                sleep 5
+                ak=$(echo "%s" | base64 -d)
+                ask=$(echo "%s" | base64 -d)
+                sudo docker run -d --name mongodump -e MONGO_URI="mongodb://mongoadmin:mongopasswd@localhost:27017/go-mongo" -e AWS_ACCESS_KEY_ID="$ak" -e AWS_SECRET_ACCESS_KEY="$ask" -e AWS_DEFAULT_REGION="us-west-2" -e S3_BUCKET="%s-torg" -e BACKUP_CRON_SCHEDULE="5 * * * *" -e MONGO_COMPLETE=true -e MAX_BACKUPS=60 lgatica/mongodump-s3
+    - base:
+        apiVersion: iam.aws.upbound.io/v1beta1
+        kind: InstanceProfile
+        metadata:
+          labels:
+            demo.wiz.io/ip: wiz-instance-profile
+          name: wiz-instance-profile
+          annotations:
+            crossplane.io/external-name: wiz-instance-profile
+        spec:
+          forProvider:
+            roleSelector:
+              matchLabels:
+                demo.wiz.io/ip: wiz-instance-profile
+      name: instance-profile
+    # IAM
+    - base:
+        apiVersion: iam.aws.upbound.io/v1beta1
+        kind: Role
+        metadata:
+          labels:
+            demo.wiz.io/ip: wiz-instance-profile
+          name: wiz-instance-profile
+        spec:
+          forProvider:
+            assumeRolePolicy: |
+              {
+                "Version": "2012-10-17",
+                "Statement": [
+                  {
+                    "Effect": "Allow",
+                    "Principal": {
+                      "Service": "ec2.amazonaws.com"
+                    },
+                    "Action": "sts:AssumeRole"
+                  }
+                ]
+              }
+            inlinePolicy:
+              - name: wiz-ec2-inline-policy
+                policy: |
+                  {
+                    "Version": "2012-10-17",
+                    "Statement": [
+                      {
+                        "Effect": "Allow",
+                        "Resource": "*",
+                        "Action": "ec2:*"
+                      }
+                    ]
+                  }
+      name: instance-profile-role
+    # Security group
+    - base:
+        apiVersion: ec2.aws.upbound.io/v1beta1
+        kind: SecurityGroup
+        spec:
+          forProvider:
+            region: us-west-2
+            description: Security group wiz demo db
+      name: dbSecurityGroup
+      patches:
+        - fromFieldPath: spec.id
+          toFieldPath: spec.forProvider.vpcIdSelector.matchLabels[networks.demo.wiz.io/network-id]
+        - fromFieldPath: spec.id
+          toFieldPath: metadata.name
+          transforms:
+            - string:
+                fmt: '%s-ec2-sg'
+              type: string
+        - fromFieldPath: spec.id
+          toFieldPath: spec.forProvider.name
+          transforms:
+            - string:
+                fmt: '%s-ec2-sg'
+              type: string
+        - fromFieldPath: spec.id
+          toFieldPath: metadata.labels[securitygroup]
+          transforms:
+            - string:
+                fmt: '%s-ec2-sg'
+              type: string
+    - base:
+        apiVersion: ec2.aws.upbound.io/v1beta1
+        kind: SecurityGroupRule
+        spec:
+          forProvider:
+            region: us-west-2
+            cidrBlocks:
+              - 0.0.0.0/0
+            description: Allow egress
+            fromPort: 0
+            protocol: "-1"
+            securityGroupIdSelector:
+              matchControllerRef: true
+            toPort: 0
+            type: egress
+      name: egress
+      patches:
+        - fromFieldPath: spec.id
+          toFieldPath: spec.forProvider.securityGroupIdSelector.matchLabels[securitygroup]
+          transforms:
+            - string:
+                fmt: '%s-ec2-sg'
+              type: string
+        - fromFieldPath: spec.id
+          toFieldPath: metadata.name
+          transforms:
+            - string:
+                fmt: '%s-sg-rule-egress'
+              type: string
+    - base:
+        apiVersion: ec2.aws.upbound.io/v1beta1
+        kind: SecurityGroupRule
+        spec:
+          forProvider:
+            region: us-west-2
+            cidrBlocks:
+              - 192.168.0.0/16
+              #- 192.168.192.0/18
+            description: Allow inbound from vpc
+            fromPort: 27017
+            protocol: tcp
+            securityGroupIdSelector:
+              matchControllerRef: true
+            toPort: 27017
+            type: ingress
+      name: dbSecurityGroupRuleIngress
+      patches:
+        - fromFieldPath: spec.id
+          toFieldPath: spec.forProvider.securityGroupIdSelector.matchLabels[securitygroup]
+          transforms:
+            - string:
+                fmt: '%s-ec2-sg'
+              type: string
+        - fromFieldPath: spec.id
+          toFieldPath: metadata.name
+          transforms:
+            - string:
+                fmt: '%s-sg-rule-db-ingress'
+              type: string
+    - base:
+        apiVersion: ec2.aws.upbound.io/v1beta1
+        kind: SecurityGroupRule
+        spec:
+          forProvider:
+            region: us-west-2
+            cidrBlocks:
+              - 0.0.0.0/0
+            description: Allow ssh inbound from everywhere
+            fromPort: 22
+            protocol: tcp
+            securityGroupIdSelector:
+              matchControllerRef: true
+            toPort: 22
+            type: ingress
+      name: sshSecurityGroupRuleIngress
+      patches:
+        - fromFieldPath: spec.id
+          toFieldPath: spec.forProvider.securityGroupIdSelector.matchLabels[securitygroup]
+          transforms:
+            - string:
+                fmt: '%s-ec2-sg'
+              type: string
+        - fromFieldPath: spec.id
+          toFieldPath: metadata.name
+          transforms:
+            - string:
+                fmt: '%s-sg-rule-ssh-ingress'
+              type: string
+## Bucket Stuff
+    - base:
+        apiVersion: s3.aws.upbound.io/v1beta1
+        kind: Bucket
+        spec:
+          deletionPolicy: Delete
+          forProvider:
+            region: us-west-2
+            forceDestroy: true
+      name: s3bucket
+      patches:
+        - fromFieldPath: spec.id
+          toFieldPath: metadata.name
+          transforms:
+            - string:
+                fmt: '%s-torg'
+              type: string
+        - fromFieldPath: spec.id
+          toFieldPath: spec.forProvider.tags.Name
+          transforms:
+            - string:
+                fmt: '%s-torg'
+              type: string
+    - base:
+        apiVersion: s3.aws.upbound.io/v1beta1
+        kind: BucketPublicAccessBlock
+        spec:
+          forProvider:
+            region: us-west-2
+            blockPublicPolicy: false
+      name: bucketPublicAccess
+      patches:
+        - fromFieldPath: spec.id
+          toFieldPath: metadata.name
+          transforms:
+            - type: string
+              string:
+                fmt: "%s-bucketpubaccess"
+        - fromFieldPath: spec.id
+          toFieldPath: spec.forProvider.bucket
+          transforms:
+            - type: string
+              string:
+                fmt: "%s-torg"
+    - base:
+        apiVersion: s3.aws.upbound.io/v1beta1
+        kind: BucketPolicy
+        spec:
+          forProvider:
+            region: us-west-2
+      name: bucketPolicy
+      patches:
+        - fromFieldPath: spec.id
+          toFieldPath: spec.forProvider.policy
+          transforms:
+            - type: string
+              string:
+                fmt: |
+                    {
+                      "Version": "2012-10-17",
+                      "Statement": [{
+                        "Effect": "Allow",
+                        "Principal": "*",
+                        "Action": [
+                          "s3:GetObject",
+                          "s3:GetObjectVersion"
+                        ],
+                        "Resource": [
+                          "arn:aws:s3:::%s-torg/*"
+                        ]
+                      }]
+                    }
+        - fromFieldPath: spec.id
+          toFieldPath: metadata.name
+          transforms:
+            - type: string
+              string:
+                fmt: "%s-bucketpolicy"
+        - fromFieldPath: spec.id
+          toFieldPath: spec.forProvider.bucket
+          transforms:
+            - type: string
+              string:
+                fmt: "%s-torg"
+    ## User to allow writing to bucket for mongodump
+    - base:
+        apiVersion: iam.aws.upbound.io/v1beta1
+        kind: User
+      name: bucketUser
+      patches:
+        - fromFieldPath: spec.id
+          toFieldPath: metadata.name
+          transforms:
+            - type: string
+              string:
+                fmt: "%s-bucket-user"
+        - fromFieldPath: spec.id
+          toFieldPath: spec.forProvider.tags.Name
+          transforms:
+            - type: string
+              string:
+                fmt: "%s-bucket-user"
+    - base:
+        apiVersion: iam.aws.upbound.io/v1beta1
+        kind: Policy
+      name: bucketUserPolicy
+      patches:
+        - fromFieldPath: spec.id
+          toFieldPath: metadata.name
+          transforms:
+            - type: string
+              string:
+                fmt: "%s-bucket-user-policy"
+        - fromFieldPath: spec.id
+          toFieldPath: spec.forProvider.tags.Name
+          transforms:
+            - type: string
+              string:
+                fmt: "%s-bucket-user-policy"
+        - type: CombineFromComposite
+          toFieldPath: spec.forProvider.policy
+          combine:
+            variables:
+              - fromFieldPath: spec.id
+              - fromFieldPath: spec.id
+            strategy: string
+            string:
+              fmt: |
+                {
+                    "Version": "2012-10-17",
+                    "Statement": [
+                        {
+                            "Effect": "Allow",
+                            "Action": [
+                                "s3:PutObject",
+                                "s3:PutObjectAcl"
+                            ],
+                            "Resource": [
+                                "arn:aws:s3:::%s-torg/*"
+                            ]
+                        },
+                        {
+                            "Effect": "Allow",
+                            "Action": [
+                                "s3:ListBucket"
+                            ],
+                            "Resource": [
+                                "arn:aws:s3:::%s-torg"
+                            ]
+                        }
+                    ]
+                }
+    - base:
+        apiVersion: iam.aws.upbound.io/v1beta1
+        kind: UserPolicyAttachment
+        spec:
+          forProvider:
+            policyArnRef:
+              name: wiz-demo-bucket-policy
+            userRef:
+              name: wiz-demo-buckets
+      name: bucketUserPolicyAttach
+      patches:
+        - fromFieldPath: spec.id
+          toFieldPath: metadata.name
+          transforms:
+            - type: string
+              string:
+                fmt: "%s-bucket-user-policy-attach"
+        - fromFieldPath: spec.id
+          toFieldPath: spec.forProvider.policyArnRef.name
+          transforms:
+            - type: string
+              string:
+                fmt: "%s-bucket-user-policy"
+        - fromFieldPath: spec.id
+          toFieldPath: spec.forProvider.userRef.name
+          transforms:
+            - type: string
+              string:
+                fmt: "%s-bucket-user"
+    - base:
+        apiVersion: iam.aws.upbound.io/v1beta1
+        kind: AccessKey
+        spec:
+          forProvider:
+            userRef:
+              name: wiz-demo-buckets
+          writeConnectionSecretToRef:
+            namespace: crossplane-system
+      name: bucketUserAccessKey
+      patches:
+        - fromFieldPath: spec.id
+          toFieldPath: metadata.name
+          transforms:
+            - type: string
+              string:
+                fmt: "%s-bucket-user-access-key"
+        - fromFieldPath: spec.id
+          toFieldPath: spec.forProvider.userRef.name
+          transforms:
+            - type: string
+              string:
+                fmt: "%s-bucket-user"
+        - fromFieldPath: spec.id
+          toFieldPath: spec.writeConnectionSecretToRef.name
+          transforms:
+            - type: string
+              string:
+                fmt: "%s-bucket-user"
+    # Hack to get accesskey
+    - base:
+        apiVersion: kubernetes.crossplane.io/v1alpha2
+        kind: Object
+        spec:
+          deletionPolicy: Delete
+          forProvider:
+            manifest:
+              apiVersion: v1
+              kind: Secret
+              metadata:
+                namespace: crossplane-system
+              data:
+                sync: ""
+      name: bucketUserSecretObject
+      patches:
+        - fromFieldPath: spec.id
+          toFieldPath: metadata.name
+          transforms:
+            - type: string
+              string:
+                fmt: "%s-bucket-user-secret"
+        - fromFieldPath: spec.id
+          toFieldPath: spec.forProvider.manifest.metadata.name
+          transforms:
+            - type: string
+              string:
+                fmt: "%s-bucket-user"
+        - fromFieldPath: spec.id
+          toFieldPath: spec.forProvider.manifest.metadata.annotations[crossplane.io/external-name]
+          transforms:
+            - type: string
+              string:
+                fmt: "%s-bucket-user"
+        - fromFieldPath: spec.id
+          toFieldPath: metadata.annotations[crossplane.io/external-name]
+          transforms:
+            - type: string
+              string:
+                fmt: "%s-bucket-user"
+        - fromFieldPath: status.atProvider.manifest
+          toFieldPath: status.awsInfo
+          type: ToCompositeFieldPath
+
+    #- base:
+    #    apiVersion: ec2.aws.upbound.io/v1beta1
+    #    kind: SecurityGroupRule
+    #    spec:
+    #      forProvider:
+    #        region: us-west-2
+    #        description: Allow inbound from eks security group
+    #        fromPort: 27017
+    #        protocol: tcp
+    #        securityGroupIdSelector:
+    #          matchControllerRef: true
+    #        sourceSecurityGroupId: sg-09f328ef9efc896f7
+    #        toPort: 27017
+    #        type: ingress
+    #  name: dbSecurityGroupRuleIngressFromEks
+    #  patches:
+    #    - fromFieldPath: spec.id
+    #      toFieldPath: spec.forProvider.securityGroupIdSelector.matchLabels[securitygroup]
+    #      transforms:
+    #        - string:
+    #            fmt: '%s-ec2-sg'
+    #          type: string
+    #    - fromFieldPath: spec.id
+    #      toFieldPath: metadata.name
+    #      transforms:
+    #        - string:
+    #            fmt: '%s-sg-rule-db-ingress-from-eks'
+    #          type: string

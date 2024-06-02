@@ -28,4 +28,13 @@ spec:
                 privateIp:
                   description: get the private ip
                   type: string
+                test:
+                  type: string
+                awsInfo:
+                  type: object
+                  #x-kubernetes-preserve-unknown-fields: true
+                  properties:
+                    data:
+                      type: object
+                      x-kubernetes-preserve-unknown-fields: true
               type: object
