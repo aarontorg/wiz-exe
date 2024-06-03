@@ -23,12 +23,8 @@ spec:
           toFieldPath: spec.id
         - fromFieldPath: spec.eks.k8Version
           toFieldPath: spec.k8Version
-        - fromFieldPath: spec.eks.iam.roleArn
-          toFieldPath: spec.iam.roleArn
-        - fromFieldPath: spec.eks.iam.userArn
-          toFieldPath: spec.iam.userArn
-        - fromFieldPath: spec.eks.iam.autoscalerArn
-          toFieldPath: spec.iam.autoscalerArn
+        - fromFieldPath: spec.eks.iam.awsArn
+          toFieldPath: spec.iam.awsArn
     - base:
         apiVersion: demo.wiz.io/v1alpha1
         kind: XEc2

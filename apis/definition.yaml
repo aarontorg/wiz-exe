@@ -34,22 +34,23 @@ spec:
                     type: object
                     description: IAM configuration to connect as ClusterAdmin.
                     properties:
-                      roleArn:
-                        description: The IAM Role ARN to connect as ClusterAdmin.
+                      awsArn:
+                        description: Arn of top level user
                         type: string
-                        default: roleArn
-                      userArn:
-                        description: The IAM User ARN to connect as ClusterAdmin.
-                        type: string
-                        default: userArn
-                      autoscalerArn:
-                        description: The AutoScaler Role ARN to connect as ClusterAdmin.
-                        type: string
-                        default: autoscalerArn
+                      #roleArn:
+                      #  description: The IAM Role ARN to connect as ClusterAdmin.
+                      #  type: string
+                      #  default: roleArn
+                      #userArn:
+                      #  description: The IAM User ARN to connect as ClusterAdmin.
+                      #  type: string
+                      #  default: userArn
+                      #autoscalerArn:
+                      #  description: The AutoScaler Role ARN to connect as ClusterAdmin.
+                      #  type: string
+                      #  default: autoscalerArn
                     required:
-                      - roleArn
-                      - userArn
-                      - autoscalerArn
+                      - awsArn
                 required:
                   - k8Version
                   - iam

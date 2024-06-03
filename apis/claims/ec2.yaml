@@ -1,7 +1,7 @@
 apiVersion: demo.wiz.io/v1alpha1
 kind: XEc2
 metadata:
-  name: wiz-demo
+  name: wiz-demo-test
 spec:
-  id: wiz-demo
+  id: wiz-demo-test
   #region: "us-west-2"

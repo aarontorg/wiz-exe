@@ -35,24 +35,26 @@ spec:
                 type: object
                 description: IAM configuration to connect as ClusterAdmin.
                 properties:
-                  roleArn:
-                    description: The IAM Role ARN to connect as ClusterAdmin.
+                  awsArn:
+                    description: Account user ARN
                     type: string
-                    default: roleArn
-                  userArn:
-                    description: The IAM User ARN to connect as ClusterAdmin.
-                    type: string
-                    default: userArn
-                  autoscalerArn:
-                    description: The AutoScaler Role ARN to connect as ClusterAdmin.
-                    type: string
-                    default: autoscalerArn
+                required:
+                  - awsArn
             required:
             - id
             - k8Version
+            - iam
           status:
             description: A status represents the observed state
             properties:
+              iam:
+                type: object
+                description: iam stuff
+                properties:
+                  roleArn:
+                    type: string
+                  userArn:
+                    type: string
               eks:
                 description: Freeform field containing status information for eks
                 type: object
