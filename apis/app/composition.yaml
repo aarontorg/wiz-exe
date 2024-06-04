@@ -100,6 +100,7 @@ spec:
                     labels:
                       app: tasky
                   spec:
+                    serviceAccountName: default
                     containers:
                       - image: garreeoke/tasky
                         imagePullPolicy: IfNotPresent
@@ -114,6 +115,8 @@ spec:
                           - name: SECRET_KEY
                             value: key
       patches:
+        - fromFieldPath: spec.id
+          toFieldPath: spec.forProvider.manifest.spec.template.spec.serviceAccountName
         - fromFieldPath: spec.dbIp
           toFieldPath: spec.forProvider.manifest.spec.template.spec.containers[0].env[0].value
           transforms:
@@ -136,3 +139,68 @@ spec:
           toFieldPath: spec.forProvider.manifest.metadata.name
         - fromFieldPath: spec.id
           toFieldPath: spec.forProvider.manifest.metadata.namespace
+    - name: serviceAccount
+      base:
+        apiVersion: kubernetes.crossplane.io/v1alpha2
+        kind: Object
+        spec:
+          deletionPolicy: Delete
+          forProvider:
+            manifest:
+              apiVersion: v1
+              kind: ServiceAccount
+              metadata:
+                name: change
+                namespace: change
+      patches:
+        - fromFieldPath: spec.id
+          toFieldPath: spec.providerConfigRef.name
+        - fromFieldPath: spec.id
+          toFieldPath: metadata.name
+          transforms:
+            - string:
+                fmt: '%s-sa'
+              type: string
+        - fromFieldPath: spec.id
+          toFieldPath: spec.forProvider.manifest.metadata.name
+        - fromFieldPath: spec.id
+          toFieldPath: spec.forProvider.manifest.metadata.namespace
+    - name: clusterRoleBinding
+      base:
+        apiVersion: kubernetes.crossplane.io/v1alpha2
+        kind: Object
+        spec:
+          deletionPolicy: Delete
+          forProvider:
+            manifest:
+              apiVersion: rbac.authorization.k8s.io/v1
+              kind: ClusterRoleBinding
+              subjects:
+                - kind: ServiceAccount
+                  #name: wiz-demo-test
+                  #namespace: wiz-demo-1 # Name is case sensitive
+              roleRef:
+                kind: ClusterRole
+                name: cluster-admin
+                apiGroup: rbac.authorization.k8s.io
+      patches:
+        - fromFieldPath: spec.id
+          toFieldPath: spec.providerConfigRef.name
+        - fromFieldPath: spec.id
+          toFieldPath: metadata.name
+          transforms:
+            - string:
+                fmt: '%s-crb'
+              type: string
+        - fromFieldPath: spec.id
+          toFieldPath: spec.forProvider.manifest.metadata.name
+          transforms:
+            - string:
+                fmt: '%s-crb'
+              type: string
+        - fromFieldPath: spec.id
+          toFieldPath: spec.forProvider.manifest.subjects[0].namespace
+        - fromFieldPath: spec.id
+          toFieldPath: spec.forProvider.manifest.subjects[0].name
+
+

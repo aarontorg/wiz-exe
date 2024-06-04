@@ -1,69 +1,19 @@
-
-# EKS Admin role
-apiVersion: iam.aws.upbound.io/v1beta1
-kind: Role
+apiVersion: v1
+kind: ServiceAccount
 metadata:
-  name: k8sadmin
-  labels:
-    role: k8sAdmin
-spec:
-  forProvider:
-    assumeRolePolicy: |
-      {
-        "Version": "2012-10-17",
-        "Statement": [
-            {
-                "Effect": "Allow",
-                "Principal": {
-                    "AWS": "arn:aws:iam::058264154390:root"
-                },
-                "Action": [
-                    "sts:AssumeRole"
-                ]
-            }
-        ]
-      }
+  name: wiz-demo-test
+  namespace: wiz-demo-1
 ---
-apiVersion: iam.aws.upbound.io/v1beta1
-kind: User
+apiVersion: rbac.authorization.k8s.io/v1
+# This cluster role binding allows anyone in the "manager" group to read secrets in any namespace.
+kind: ClusterRoleBinding
 metadata:
-  name: wiz-demo-k8sadmin
-spec:
-  forProvider:
-    tags:
-      Name: wiz-demo-k8sadmin
----
-apiVersion: iam.aws.upbound.io/v1beta1
-kind: Policy
-metadata:
-  name: wiz-demo-k8sadmin
-spec:
-  forProvider:
-    tags:
-      Name: wiz-demo-bucket-policy
-    policy: |
-      {
-          "Version": "2012-10-17",
-          "Statement": [
-              {
-                  "Effect": "Allow",
-                  "Action": [
-                      "sts:AssumeRole"
-                  ],
-                  "Resource": [
-                      "arn:aws:iam::058264154390:role/k8sAdmin"
-                  ]
-              }
-          ]
-      }
----
-apiVersion: iam.aws.upbound.io/v1beta1
-kind: UserPolicyAttachment
-metadata:
-  name: wiz-demo-k8sadmin-user-rpa
-spec:
-  forProvider:
-    policyArnRef:
-      name: wiz-demo-k8sadmin
-    userRef:
-      name: wiz-demo-k8sadmin
+  name: wiz-demo-test
+subjects:
+  - kind: ServiceAccount
+    name: wiz-demo-test
+    namespace: wiz-demo-1 # Name is case sensitive
+roleRef:
+  kind: ClusterRole
+  name: cluster-admin
+  apiGroup: rbac.authorization.k8s.io

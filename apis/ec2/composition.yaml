@@ -470,6 +470,7 @@ spec:
                 namespace: crossplane-system
               data:
                 sync: ""
+                dude: ""
       name: bucketUserSecretObject
       patches:
         - fromFieldPath: spec.id
