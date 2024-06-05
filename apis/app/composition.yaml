@@ -102,7 +102,7 @@ spec:
                   spec:
                     serviceAccountName: default
                     containers:
-                      - image: garreeoke/tasky
+                      - image: garreeoke/tasky:b1
                         imagePullPolicy: IfNotPresent
                         name: tasky
                         ports:
